@@ -168,7 +168,7 @@ QuickTable/
 **Prerequisites:** Node.js 22+, Docker (for Postgres/Redis), npm.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/chayma958/QuickTable.git
 cd QuickTable
 
 # 1. Start local Postgres + Redis
