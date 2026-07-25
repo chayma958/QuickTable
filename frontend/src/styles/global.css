@@ -1,0 +1,126 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme {
+  --font-sans: 'InterVariable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-bg: #ffffff;
+  --color-bg-subtle: #fafaf8;
+  --color-surface: #ffffff;
+  --color-border: #e7e5e1;
+  --color-text: #1c1e1b;
+  --color-text-muted: #78766e;
+
+  --color-brand: #059669;
+  --color-brand-dark: #047857;
+  --color-brand-light: #d1fae5;
+
+  --color-success: #16a34a;
+  --color-warning: #ca8a04;
+  --color-danger: #dc2626;
+
+  --color-status-pending: #ca8a04;
+  --color-status-pending-bg: #fef3c7;
+  --color-status-progress: #2563eb;
+  --color-status-progress-bg: #dbeafe;
+  --color-status-ready: #16a34a;
+  --color-status-ready-bg: #dcfce7;
+  --color-status-done: #57534e;
+  --color-status-done-bg: #f1f0ed;
+  --color-status-cancelled: #dc2626;
+  --color-status-cancelled-bg: #fee2e2;
+
+  --radius-dialog: 1.25rem;
+
+  --shadow-soft: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
+  --shadow-elevated: 0 4px 16px rgba(28, 25, 23, 0.08), 0 1px 3px rgba(28, 25, 23, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #0c0a09;
+    --color-bg-subtle: #161412;
+    --color-surface: #1c1917;
+    --color-border: #292524;
+    --color-text: #fafaf9;
+    --color-text-muted: #a8a29e;
+
+    --color-brand-light: #064e3b;
+
+    --color-status-pending-bg: #451a03;
+    --color-status-progress-bg: #1e3a5f;
+    --color-status-ready-bg: #14532d;
+    --color-status-done-bg: #292524;
+    --color-status-cancelled-bg: #450a0a;
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #0c0a09;
+  --color-bg-subtle: #161412;
+  --color-surface: #1c1917;
+  --color-border: #292524;
+  --color-text: #fafaf9;
+  --color-text-muted: #a8a29e;
+
+  --color-brand-light: #064e3b;
+
+  --color-status-pending-bg: #451a03;
+  --color-status-progress-bg: #1e3a5f;
+  --color-status-ready-bg: #14532d;
+  --color-status-done-bg: #292524;
+  --color-status-cancelled-bg: #450a0a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg-subtle);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+button {
+  font-family: inherit;
+}
+
+button:not(:disabled),
+[type='button']:not(:disabled),
+[type='submit']:not(:disabled),
+[type='reset']:not(:disabled),
+[role='button'],
+select,
+summary {
+  cursor: pointer;
+}
+
+.bg-noise {
+  position: relative;
+  isolation: isolate;
+}
+.bg-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.bg-noise > * {
+  position: relative;
+  z-index: 1;
+}

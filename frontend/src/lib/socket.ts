@@ -1,0 +1,11 @@
+import { io, type Socket } from 'socket.io-client';
+
+let socket: Socket | null = null;
+
+export function getSocket(): Socket {
+  socket ??= io(import.meta.env.VITE_SOCKET_URL, {
+    autoConnect: true,
+    transports: ['websocket'],
+  });
+  return socket;
+}

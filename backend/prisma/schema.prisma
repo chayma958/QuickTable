@@ -1,0 +1,503 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  KITCHEN
+  WAITER
+}
+
+enum OrderType {
+  DINE_IN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  PAY_ON_DELIVERY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum KitchenNoteReason {
+  ITEM_UNAVAILABLE
+  PREPARATION_DELAYED
+  NEED_CLARIFICATION
+  CUSTOM
+}
+
+enum KitchenNoteStatus {
+  OPEN
+  ACKNOWLEDGED
+}
+
+// ---------------------------------------------------------------------------
+// Platform / tenancy
+// ---------------------------------------------------------------------------
+
+model SubscriptionPlan {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  priceMonthly Decimal  @db.Decimal(10, 2)
+  maxTables    Int
+  maxEmployees Int
+  maxMenuItems Int
+  features     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurants Restaurant[]
+}
+
+model Restaurant {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  description   String?
+  logoUrl       String?
+  coverImageUrl String?
+  galleryImages String[] @default([])
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  country       String?
+  currency      String   @default("USD")
+  taxRate       Decimal  @default(0) @db.Decimal(5, 2)
+  openingHours  Json?
+  isActive      Boolean  @default(true)
+
+  // Amenities shown on the public restaurant page — owner-controlled per
+  // restaurant rather than a fixed hardcoded list.
+  hasParking              Boolean @default(false)
+  hasWifi                 Boolean @default(false)
+  isWheelchairAccessible  Boolean @default(false)
+  isPetFriendly           Boolean @default(false)
+  acceptsCardPayment      Boolean @default(false)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscriptionPlanId String?
+  subscriptionPlan   SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
+
+  staff         User[]
+  categories    Category[]
+  menuItems     MenuItem[]
+  tables        Table[]
+  orders        Order[]
+  coupons       Coupon[]
+  reviews       Review[]
+  tableRequests TableRequest[]
+  invitations   Invitation[]
+  kitchenNotes  KitchenNote[]
+
+  @@index([subscriptionPlanId])
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+// Staff accounts: super admin (restaurantId null) and all restaurant-scoped
+// roles (owner, manager, kitchen, waiter).
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  avatarUrl    String?
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  auditLogs           AuditLog[]      @relation("AuditLogUser")
+  refreshTokens       RefreshToken[]
+  passwordResets      PasswordReset[]
+  ordersServed        Order[]         @relation("OrderServedBy")
+  removedOrderItems   OrderItem[]     @relation("OrderItemRemovedBy")
+  assignedTables      Table[]         @relation("TableAssignedWaiter")
+  kitchenNotesCreated KitchenNote[]   @relation("KitchenNoteAuthor")
+
+  @@index([restaurantId])
+}
+
+// An invited-but-not-yet-activated staff member. The User row is only
+// created once the invitee accepts and sets a password — tokenHash mirrors
+// RefreshToken's pattern (only the hash is stored; the raw token lives in
+// the emailed link and is never persisted).
+model Invitation {
+  id           String           @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  email        String
+  name         String
+  role         Role
+  tokenHash    String           @unique
+  status       InvitationStatus @default(PENDING)
+  expiresAt    DateTime
+  createdAt    DateTime         @default(now())
+  acceptedAt   DateTime?
+
+  @@index([restaurantId])
+}
+
+// Customers order via QR with no account — a row is created at checkout from
+// name/phone/email purely to link orders/reviews together (see
+// OrdersService.upsertGuestCustomer); there is no customer login.
+model Customer {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  phone     String?  @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders  Order[]
+  reviews Review[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// A requested-but-not-yet-used password reset link — same hashed-token
+// pattern as RefreshToken/Invitation: only the hash is stored, the raw token
+// lives only in the emailed link and is never persisted or returned by any API.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Menu
+// ---------------------------------------------------------------------------
+
+model Category {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  imageUrl     String?
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  menuItems MenuItem[]
+
+  @@index([restaurantId])
+}
+
+model MenuItem {
+  id                     String     @id @default(cuid())
+  restaurantId           String
+  restaurant             Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categoryId             String
+  category               Category   @relation(fields: [categoryId], references: [id])
+  name                   String
+  description            String?
+  imageUrl               String?
+  price                  Decimal    @db.Decimal(10, 2)
+  discountPrice          Decimal?   @db.Decimal(10, 2)
+  isAvailable            Boolean    @default(true)
+  preparationTimeMinutes Int        @default(15)
+  calories               Int?
+  isVegetarian           Boolean    @default(false)
+  isVegan                Boolean    @default(false)
+  isGlutenFree           Boolean    @default(false)
+  isSpicy                Boolean    @default(false)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([restaurantId])
+  @@index([categoryId])
+}
+
+// ---------------------------------------------------------------------------
+// Tables / QR ordering
+// ---------------------------------------------------------------------------
+
+model Table {
+  id                      String     @id @default(cuid())
+  restaurantId            String
+  restaurant              Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  number                  Int
+  qrCodeUrl               String?
+  isActive                Boolean    @default(true)
+  // Dining-room state: set true when the first order of a new sitting is
+  // placed, cleared by the waiter's "Close table" action once paid up.
+  isOccupied              Boolean    @default(false)
+  currentSessionStartedAt DateTime?
+  createdAt               DateTime   @default(now())
+
+  // Which waiter this table is assigned to (nullable = unassigned, visible/
+  // notified to every waiter). Purely a notification-routing concern — every
+  // waiter can still see and act on every table regardless of assignment.
+  assignedWaiterId String?
+  assignedWaiter   User?   @relation("TableAssignedWaiter", fields: [assignedWaiterId], references: [id], onDelete: SetNull)
+
+  orders       Order[]
+  requests     TableRequest[]
+  kitchenNotes KitchenNote[]
+
+  @@unique([restaurantId, number])
+  @@index([assignedWaiterId])
+}
+
+enum TableRequestType {
+  ASSISTANCE
+  BILL
+}
+
+enum TableRequestStatus {
+  PENDING
+  RESOLVED
+}
+
+// Customer-initiated "call waiter" / "request the bill" pings from the dining
+// room — no login involved, same public trust model as order tracking.
+model TableRequest {
+  id           String             @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tableId      String
+  table        Table              @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  type         TableRequestType
+  status       TableRequestStatus @default(PENDING)
+  createdAt    DateTime           @default(now())
+  resolvedAt   DateTime?
+
+  @@index([restaurantId, status])
+  @@index([tableId])
+}
+
+// Kitchen-initiated note to the waiter about a specific order (item
+// unavailable, prep delayed, needs clarification, or a custom message) —
+// same shape/lifecycle as TableRequest, just staff-initiated instead of
+// customer-initiated.
+model KitchenNote {
+  id           String            @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderId      String
+  order        Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tableId      String?
+  table        Table?            @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  reason       KitchenNoteReason
+  message      String?
+  status       KitchenNoteStatus @default(OPEN)
+  createdById  String?
+  createdBy    User?             @relation("KitchenNoteAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime          @default(now())
+  acknowledgedAt DateTime?
+
+  @@index([restaurantId, status])
+  @@index([orderId])
+  @@index([tableId])
+}
+
+// ---------------------------------------------------------------------------
+// Coupons
+// ---------------------------------------------------------------------------
+
+model Coupon {
+  id                  String     @id @default(cuid())
+  restaurantId        String
+  restaurant          Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code                String
+  type                CouponType
+  value               Decimal    @db.Decimal(10, 2)
+  minOrderAmount      Decimal?   @db.Decimal(10, 2)
+  maxUsageCount       Int?
+  usageCount          Int        @default(0)
+  maxUsagePerCustomer Int?
+  expiresAt           DateTime?
+  isActive            Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+
+  orders Order[]
+
+  @@unique([restaurantId, code])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id          String @id @default(cuid())
+  orderNumber Int    @unique @default(autoincrement())
+
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+
+  tableId String?
+  table   Table?  @relation(fields: [tableId], references: [id])
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  type   OrderType
+  status OrderStatus @default(PENDING)
+
+  subtotal       Decimal @db.Decimal(10, 2)
+  taxAmount      Decimal @default(0) @db.Decimal(10, 2)
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
+  totalAmount    Decimal @db.Decimal(10, 2)
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id])
+
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(PENDING)
+
+  customerName  String?
+  customerPhone String?
+  notes         String?
+
+  // The waiter (or manager) who marked this order DELIVERED — set at that
+  // exact status transition, see OrdersService.updateStatus.
+  servedByUserId String?
+  servedBy       User?   @relation("OrderServedBy", fields: [servedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+  preparingAt DateTime?
+  readyAt     DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+
+  items        OrderItem[]
+  auditLogs    AuditLog[]
+  review       Review?
+  kitchenNotes KitchenNote[]
+
+  @@index([restaurantId, status])
+  @@index([customerId])
+  @@index([servedByUserId])
+}
+
+model OrderItem {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId    String
+  menuItem      MenuItem @relation(fields: [menuItemId], references: [id])
+  nameSnapshot  String
+  priceSnapshot Decimal  @db.Decimal(10, 2)
+  quantity      Int
+  subtotal      Decimal  @db.Decimal(10, 2)
+  notes         String?
+
+  // Soft-delete — a waiter can remove an item while the order is still
+  // PENDING; kept as a row (not hard-deleted) so totals recompute correctly
+  // and the removal stays attributable/auditable.
+  removedAt       DateTime?
+  removedByUserId String?
+  removedBy       User?     @relation("OrderItemRemovedBy", fields: [removedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+// ---------------------------------------------------------------------------
+// Customer engagement
+// ---------------------------------------------------------------------------
+
+model Review {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     Customer   @relation(fields: [customerId], references: [id])
+  orderId      String     @unique
+  order        Order      @relation(fields: [orderId], references: [id])
+  rating       Int
+  comment      String?
+  createdAt    DateTime   @default(now())
+
+  @@index([restaurantId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit log (who changed an order, and when)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  userId String?
+  user   User?   @relation("AuditLogUser", fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+}
