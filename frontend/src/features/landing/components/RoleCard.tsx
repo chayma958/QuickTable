@@ -19,11 +19,11 @@ export function RoleCard({
   to: string;
 }) {
   return (
-    <motion.div whileHover={{ y: -4 }} whileTap={{ scale: 0.98 }}>
+    <motion.div className="h-full" whileHover={{ y: -4 }} whileTap={{ scale: 0.98 }}>
       <Link
         to={to}
         aria-disabled={isLoading}
-        className="group flex flex-col items-start gap-4 rounded-2xl border border-border bg-surface p-6 text-left shadow-soft transition-shadow hover:shadow-elevated aria-disabled:pointer-events-none aria-disabled:cursor-wait aria-disabled:opacity-70"
+        className="group flex h-full flex-col items-start gap-4 rounded-2xl border border-border bg-surface p-6 text-left shadow-soft transition-shadow hover:shadow-elevated aria-disabled:pointer-events-none aria-disabled:cursor-wait aria-disabled:opacity-70"
       >
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-light text-brand-dark">
           <Icon size={20} strokeWidth={2} />
