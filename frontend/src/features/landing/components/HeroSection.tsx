@@ -34,8 +34,7 @@ export function HeroSection() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mx-auto mt-5 max-w-xl text-lg text-text-muted lg:mx-0"
         >
-          QuickTable runs the whole loop &mdash; QR ordering, kitchen display, dining-room
-          management, and platform administration &mdash; on one real-time backend.
+        QuickTable is a real-time restaurant management platform that connects guests, waiters, the kitchen, restaurant owners, and platform administrators in one seamless workflow.
         </motion.p>
 
         <motion.div
